@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/server/url", "destination": "/api/proxy" }
+  ]
+}
