@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "node-fetch": "^2.6.7"
+    "http-proxy-middleware": "^2.0.6"
   }
 }
 
