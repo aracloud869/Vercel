@@ -3,7 +3,6 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const app = express();
 
-// Hàm giải mã Base64 sang URL
 function decodeBase64(str) {
     try {
         return Buffer.from(str, 'base64').toString('utf-8');
@@ -12,7 +11,8 @@ function decodeBase64(str) {
     }
 }
 
-app.get('/', async (req, res) => {
+// THAY ĐỔI Ở ĐÂY: Lắng nghe chính xác đường dẫn /server/url
+app.get('/server/url', async (req, res) => {
     const encodedUrl = req.query.data;
 
     if (!encodedUrl) {
@@ -26,7 +26,6 @@ app.get('/', async (req, res) => {
     }
 
     try {
-        // Tải nội dung từ trang gốc, cấu hình chống chặn IP và tự động giải nén dữ liệu
         const response = await axios.get(targetUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -34,10 +33,9 @@ app.get('/', async (req, res) => {
                 'Accept-Encoding': 'gzip, deflate, br'
             },
             responseType: 'text',
-            timeout: 10000 // Giới hạn 10 giây để tránh treo Serverless
+            timeout: 15000 // Tăng lên 15 giây cho các trang nặng
         });
 
-        // Vô hiệu hóa triệt để các Header chặn iframe
         res.setHeader('X-Frame-Options', 'ALLOWALL');
         res.removeHeader('Content-Security-Policy');
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -47,19 +45,15 @@ app.get('/', async (req, res) => {
         const parsedUrl = new URL(targetUrl);
         const originUrl = parsedUrl.origin;
 
-        // Sử dụng cheerio để phân tích cú pháp HTML và sửa đổi link
         const $ = cheerio.load(response.data);
 
-        // 1. Sửa toàn bộ liên kết hình ảnh, script, css, link neo
         const fixAttribute = (selector, attr) => {
             $(selector).each((index, element) => {
                 const rawVal = $(element).attr(attr);
                 if (rawVal && !rawVal.startsWith('http') && !rawVal.startsWith('data:') && !rawVal.startsWith('//')) {
                     if (rawVal.startsWith('/')) {
-                        // Đường dẫn tuyệt đối từ gốc domain (Ví dụ: /assets/main.js -> https://domain.com)
                         $(element).attr(attr, originUrl + rawVal);
                     } else {
-                        // Đường dẫn tương đối từ thư mục hiện tại (Ví dụ: assets/main.js -> https://domain.com)
                         $(element).attr(attr, baseUrl + rawVal);
                     }
                 }
@@ -72,13 +66,17 @@ app.get('/', async (req, res) => {
         fixAttribute('a', 'href');
         fixAttribute('source', 'src');
 
-        // Trả về chuỗi HTML hoàn chỉnh đã sửa lỗi link
         return res.send($.html());
 
     } catch (error) {
         console.error('Lỗi Proxy:', error.message);
         return res.status(500).send(`Không thể tải trang web mục tiêu. Chi tiết lỗi: ${error.message}`);
     }
+});
+
+// Thêm một trang chào mừng ở trang chủ để tránh lỗi 404 khi vào link gốc
+app.get('/', (req, res) => {
+    res.send('Server Proxy đang hoạt động! Hãy sử dụng đường dẫn: /server/url?data=MÃ_BASE64');
 });
 
 module.exports = app;
