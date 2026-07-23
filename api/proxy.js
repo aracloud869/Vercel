@@ -1,32 +1,41 @@
-const { createProxyMiddleware } = require('http-proxy-middleware');
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
-export default async function handler(req, res) {
+const proxyMiddleware = createProxyMiddleware({
+  target: 'https://now.gg',
+  changeOrigin: true,
+  ws: true,
+  pathRewrite: {
+    '^/server/url': '', 
+  },
+  onProxyRes: function (proxyRes) {
+    delete proxyRes.headers['x-frame-options'];
+    delete proxyRes.headers['content-security-policy'];
+    proxyRes.headers['access-control-allow-origin'] = '*';
+  }
+});
+
+export default function handler(req, res) {
   const { data } = req.query;
   if (!data) return res.status(400).send("Thiếu tham số dữ liệu (?data=)");
 
   try {
     let targetUrl = "";
-    
-    // Hỗ trợ cả mã số cố định 68 hoặc chuỗi Base64
     if (data === "68") {
-      targetUrl = "https://now.gg";
+      targetUrl = "https://now.gg/play/sugar-game-network-limited/9030/magic-forest-dragon-quest";
     } else {
       targetUrl = Buffer.from(data, 'base64').toString('utf-8');
     }
 
     const originUrl = new URL(targetUrl);
+    proxyMiddleware.options.target = originUrl.origin;
+    proxyMiddleware.options.pathRewrite['^/server/url'] = originUrl.pathname;
 
-    // Cấu hình Proxy toàn phần: Đánh lừa toàn bộ hệ thống kết nối ngầm ngầm của game
-    const proxy = createProxyMiddleware({
-      target: originUrl.origin,
-      changeOrigin: true,
-      ws: true, // Bắt buộc: Kích hoạt luồng truyền dữ liệu WebSocket cho game đám mây
-      pathRewrite: {
-        '^/server/url': originUrl.pathname, // Ép Vercel nhận diện đúng đường dẫn game
-      },
-      onProxyRes: function (proxyRes, req, res) {
-        // Gỡ bỏ triệt để các rào cản chặn Iframe từ máy chủ gốc
-        delete proxyRes.headers['x-frame-options'];
+    return proxyMiddleware(req, res);
+  } catch (error) {
+    return res.status(500).send("Lỗi cấu hình Proxy toàn phần.");
+  }
+}
+ers['x-frame-options'];
         delete proxyRes.headers['content-security-policy'];
         proxyRes.headers['access-control-allow-origin'] = '*';
       }
