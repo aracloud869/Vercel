@@ -1,7 +1,5 @@
 {
+  "name": "my-proxy",
+  "version": "1.0.0",
   "type": "module"
-}
- "dependencies": {
-    "http-proxy-middleware": "^2.0.6"
-  }
 }
