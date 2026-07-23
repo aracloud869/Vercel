@@ -1,39 +1,42 @@
-import { createProxyMiddleware } from 'http-proxy-middleware';
-
-const proxyMiddleware = createProxyMiddleware({
-  target: 'https://export default async function handler(req, res) {
+export default async function handler(req, res) {
   const { data } = req.query;
-  if (!data) return res.status(400).send("Thiếu tham số dữ liệu (?data=)");
+
+  if (!data) {
+    return res.status(400).send("Thiếu tham số dữ liệu (?data=)");
+  }
 
   try {
     let targetUrl = "";
+    
+    // Xử lý tham số truyền vào
     if (data === "68") {
-      targetUrl = "https://now.gg";
+      targetUrl = "https://now.gg/play/sugar-game-network-limited/9030/magic-forest-dragon-quest";
     } else {
+      // Giải mã Base64
       targetUrl = Buffer.from(data, 'base64').toString('utf-8');
     }
 
     const originUrl = new URL(targetUrl);
 
-    // Tự động lấy dữ liệu từ máy chủ game gốc
+    // Gửi request lấy dữ liệu từ máy chủ gốc
     const response = await fetch(targetUrl, {
       headers: {
-        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
+        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Referer': originUrl.origin
       }
     });
 
     if (!response.ok) {
-      return res.status(response.status).send(`Máy chủ game phản hồi lỗi: ${response.status}`);
+      return res.status(response.status).send(`Máy chủ gốc phản hồi lỗi: ${response.status}`);
     }
 
-    let contentType = response.headers.get('content-type') || '';
-    
-    // Nếu là trang HTML, tiến hành bẻ khóa bảo mật và đồng bộ toàn bộ link liên kết ngầm
+    const contentType = response.headers.get('content-type') || '';
+
+    // 1. Nếu dữ liệu trả về là HTML
     if (contentType.includes('text/html')) {
       let html = await response.text();
 
-      // KHÓA CỨNG: Chặn mã JavaScript độc quyền của game tự động xóa tham số data= trên URL
+      // Script chặn trang gốc tự thay đổi/xóa URL parameter
       const antiBustScript = `
         <script>
           (function() {
@@ -47,93 +50,32 @@ const proxyMiddleware = createProxyMiddleware({
       `;
       html = html.replace('<head>', '<head>' + antiBustScript);
 
-      // ĐỒNG BỘ: Biến tất cả link nội bộ (/, ./, ../) thành link tuyệt đối dẫn thẳng tới now.gg
+      // Chuyển toàn bộ link tương đối thành tuyệt đối dẫn về origin gốc
       html = html.replace(/(src|href|action)="(?!http|https|\/\/)([^"]+)"/g, (match, attr, path) => {
         try {
-          const absoluteUrl = new URL(path, originUrl.origin).href;
-          return `${attr}="${absoluteUrl}"`;
-        } catch(e) {
+          return `${attr}="${new URL(path, originUrl.origin).href}"`;
+        } catch (e) {
           return match;
         }
       });
 
-      // Trả file HTML sạch về cho trình duyệt
+      // Cấu hình các Header cho phép hiển thị trong iframe & CORS
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-ancestors *;");
       res.setHeader('X-Frame-Options', 'ALLOWALL');
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
       return res.status(200).send(html);
     }
 
-    // Nếu là các tệp tài nguyên khác (ảnh, css, js), tiến hành truyền trực tiếp dữ liệu thô (Pipe Stream)
-    const dataBuffer = await response.arrayBuffer();
+    // 2. Nếu là các tệp tài nguyên khác (CSS, JS, Hình ảnh,...)
+    const arrayBuffer = await response.arrayBuffer();
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', contentType);
-    return res.status(200).send(Buffer.from(dataBuffer));
+    return res.status(200).send(Buffer.from(arrayBuffer));
 
   } catch (error) {
+    console.error("Proxy Error:", error);
     return res.status(500).send("Lỗi xử lý Proxy hệ thống Vercel.");
-  }
-}
-.gg',
-  changeOrigin: true,
-  ws: true,
-  pathRewrite: {
-    '^/server/url': '', 
-  },
-  onProxyRes: function (proxyRes) {
-    delete proxyRes.headers['x-frame-options'];
-    delete proxyRes.headers['content-security-policy'];
-    proxyRes.headers['access-control-allow-origin'] = '*';
-  }
-});
-
-export default function handler(req, res) {
-  const { data } = req.query;
-  if (!data) return res.status(400).send("Thiếu tham số dữ liệu (?data=)");
-
-  try {
-    let targetUrl = "";
-    if (data === "68") {
-      targetUrl = "https://now.gg/play/sugar-game-network-limited/9030/magic-forest-dragon-quest";
-    } else {
-      targetUrl = Buffer.from(data, 'base64').toString('utf-8');
-    }
-
-    const originUrl = new URL(targetUrl);
-    proxyMiddleware.options.target = originUrl.origin;
-    proxyMiddleware.options.pathRewrite['^/server/url'] = originUrl.pathname;
-
-    return proxyMiddleware(req, res);
-  } catch (error) {
-    return res.status(500).send("Lỗi cấu hình Proxy toàn phần.");
-  }
-}
-ers['x-frame-options'];
-        delete proxyRes.headers['content-security-policy'];
-        proxyRes.headers['access-control-allow-origin'] = '*';
-      }
-    });
-
-    return proxy(req, res);
-  } catch (error) {
-    return res.status(500).send("Lỗi cấu hình Proxy toàn phần.");
-  }
-}
-�� link tài nguyên nội bộ sang link tuyệt đối gốc của game
-    html = html.replace(/(src|href|action)="(?!http|https|\/\/)([^"]+)"/g, (match, attr, path) => {
-      const absoluteUrl = new URL(path, originUrl.origin).href;
-      return `${attr}="${absoluteUrl}"`;
-    });
-
-    // 3. Thiết lập các cấu hình Header bẻ khóa iframe bảo mật rộng rãi nhất
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-ancestors *;");
-    res.setHeader('X-Frame-Options', 'ALLOWALL');
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-
-    return res.status(200).send(html);
-  } catch (error) {
-    return res.status(500).send("Lỗi xử lý hệ thống mã nguồn Proxy.");
   }
 }
